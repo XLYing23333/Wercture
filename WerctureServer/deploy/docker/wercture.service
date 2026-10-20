@@ -1,0 +1,15 @@
+[Unit]
+Description=Wercture
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/wercture
+ExecStart=/usr/bin/docker compose up -d --no-build --remove-orphans
+ExecStop=/usr/bin/docker compose stop
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

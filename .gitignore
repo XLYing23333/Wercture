@@ -1,0 +1,93 @@
+# OS and editors
+.DS_Store
+Thumbs.db
+ehthumbs.db
+._*
+.Spotlight-V100
+.Trashes
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.iml
+
+# Agent tooling
+.cursor/
+.claude/
+.agents/
+.codex/
+
+# Temp directories and logs
+tmp/
+temp/
+build/
+out/
+.cache/
+log/
+*.log
+*.bak
+*.tmp
+tests
+
+# Go
+*.test
+*.out
+*.coverprofile
+*.prof
+vendor/
+
+# Build outputs: server and client are single-file binaries
+/WerctureClient/wercture
+/WerctureClient/wercture.exe
+/WerctureServer/wercture-server
+/WerctureServer/wercture-server.exe
+/dist/
+
+# Frontend dependencies and build cache
+node_modules/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# The web build output is embedded with go:embed and must exist even in a
+# fresh checkout, so WerctureServer/internal/webui/dist/ stays tracked.
+# Do not ignore it.
+
+# Runtime data, databases and secrets
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.key
+*.pem
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example
+!.env.sample
+setup.secret
+
+# Local Docker deployment state and data volume
+/WerctureServer/deploy/docker/data/
+/WerctureServer/deploy/docker/.env
+/WerctureServer/deploy/docker/.deployment-state.json
+/WerctureServer/deploy/docker/.deployment.lock
+/WerctureServer/deploy/docker/.manage.lock
+/WerctureServer/deploy/docker/.update-previous/
+/WerctureServer/deploy/docker/BUILD.json
+
+# Python: manage and console.py
+__pycache__/
+*.py[cod]
+
+# Reference source: development/Weroxy is a separate git repository
+/development
+AGENTS.md
+.aws

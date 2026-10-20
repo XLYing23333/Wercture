@@ -1,0 +1,36 @@
+# HTTP service on port 9416. SSL, if needed, is configured by the user.
+name: wercture
+
+services:
+  wercture:
+    image: ${WERCTURE_IMAGE:-wercture-server:0.1.0}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["run", "--data", "/data", "--listen", ":9416"]
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "9416:9416"
+    volumes:
+      - ${WERCTURE_DATA:-./data}:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "/wercture-server", "health", "--url", "http://127.0.0.1:9416/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 20s
+    # Boot start is wercture.service. "no" keeps Docker from starting this container on its own.
+    restart: "no"
