@@ -24,7 +24,7 @@
 
 Wercture 是一个轻量化自托管图床：仓库私有管理，文件通过直链分享。Go 服务端直接提供嵌入的 Vue 页面，SQLite 保存元数据；客户端只有一个可执行文件，同时提供终端菜单和脚本可用的 CLI，支持在本地压缩、转 WebP 后上传。
 
-支持 JPEG、PNG、GIF、WebP，也能上传 PDF 和 Markdown，并生成文档预览图。界面、初始化流程和设置沿用同家项目 [Weroxy](https://github.com/XLYing23333/Weroxy) 的设计。
+支持 JPEG、PNG、GIF、WebP，也能上传 PDF 和 Markdown，并生成文档预览图。
 
 ## 项目特性
 
@@ -397,7 +397,6 @@ Server 与 Client 是两个独立 Go module。Web 构建产物从 `WerctureServe
 
 感谢以下开源项目及贡献者：
 
-- [Weroxy](https://github.com/XLYing23333/Weroxy)：同家项目的界面、初始化与管理设计参考。
 - [Go](https://go.dev/)、[Vue](https://vuejs.org/)、[Element Plus](https://element-plus.org/)、[SQLite](https://sqlite.org/)：语言、界面与存储基础。
 - [go-webp](https://github.com/mayahiro/go-webp)：本地 WebP 编码。
 - [PDF.js](https://github.com/mozilla/pdf.js)、[go-pdfium](https://github.com/klippa-app/go-pdfium)：PDF 阅读与预览渲染。

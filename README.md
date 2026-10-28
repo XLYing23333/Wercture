@@ -24,7 +24,7 @@
 
 Wercture is a lightweight, self-hosted image host with private warehouse management and public direct links. The Go server serves an embedded Vue dashboard and stores metadata in SQLite. A single Go client provides both a terminal menu and a scriptable CLI, with optional local compression and WebP conversion before upload.
 
-JPEG, PNG, GIF and WebP are supported, alongside PDF and Markdown with document previews. The interface, initialization flow and settings follow the companion project [Weroxy](https://github.com/XLYing23333/Weroxy).
+JPEG, PNG, GIF and WebP are supported, alongside PDF and Markdown with document previews.
 
 ## Features
 
@@ -397,7 +397,6 @@ Server and Client are separate Go modules. Web output is embedded from `Wercture
 
 Thanks to these projects and their contributors:
 
-- [Weroxy](https://github.com/XLYing23333/Weroxy) for the companion UI, initialization and management design.
 - [Go](https://go.dev/), [Vue](https://vuejs.org/), [Element Plus](https://element-plus.org/) and [SQLite](https://sqlite.org/) for the application foundations.
 - [go-webp](https://github.com/mayahiro/go-webp) for local WebP encoding.
 - [PDF.js](https://github.com/mozilla/pdf.js) and [go-pdfium](https://github.com/klippa-app/go-pdfium) for PDF reading and preview rendering.
