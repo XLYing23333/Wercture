@@ -391,7 +391,7 @@ Wercture/
 └── README-CN.md                    # 简体中文说明
 ```
 
-Server 与 Client 是两个独立 Go module。Web 构建产物从 `WerctureServer/internal/webui/dist/` 嵌入，修改前端后需要重新构建。运行时不需要 Node.js 或外部数据库。本地 `development/` 参考源码及生成的 `dist/` 发布包不进入 Git。
+Server 与 Client 是两个独立 Go module。Web 构建产物从 `WerctureServer/internal/webui/dist/` 嵌入，修改前端后需要重新构建。运行时不需要 Node.js 或外部数据库。
 
 ## 致谢
 

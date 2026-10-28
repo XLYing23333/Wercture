@@ -391,7 +391,7 @@ Wercture/
 └── README-CN.md                    # 简体中文说明
 ```
 
-Server and Client are separate Go modules. Web output is embedded from `WerctureServer/internal/webui/dist/`; rebuild it after frontend changes. Runtime requires neither Node.js nor an external database. Local `development/` reference sources and generated `dist/` packages are excluded from Git.
+Server and Client are separate Go modules. Web output is embedded from `WerctureServer/internal/webui/dist/`; rebuild it after frontend changes. Runtime requires neither Node.js nor an external database.
 
 ## Acknowledgements
 
