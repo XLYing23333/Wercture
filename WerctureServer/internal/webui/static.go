@@ -29,6 +29,18 @@ func Font() ([]byte, error) {
 	return fs.ReadFile(sub, matches[0])
 }
 
+// ServeMusic serves the embedded audio placeholder without exposing a file URL.
+func ServeMusic(w http.ResponseWriter, r *http.Request) {
+	sub, err := fs.Sub(dist, "dist")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "private, no-store")
+	http.ServeFileFS(w, r, sub, "music-note-beamed.svg")
+}
+
 // Serve writes a built file, or the application shell for client-side routes.
 func Serve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")

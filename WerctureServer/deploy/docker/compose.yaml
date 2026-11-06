@@ -3,7 +3,7 @@ name: wercture
 
 services:
   wercture:
-    image: ${WERCTURE_IMAGE:-wercture-server:0.1.0}
+    image: ${WERCTURE_IMAGE:-wercture-server:0.2.0}
     build:
       context: ../..
       dockerfile: Dockerfile

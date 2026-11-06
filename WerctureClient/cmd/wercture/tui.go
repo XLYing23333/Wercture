@@ -168,7 +168,11 @@ func act(db *config.DB, term terminal, copy menuText, selected int, profile conf
 		if !okInput {
 			return ""
 		}
-		return uploadPaths(profile, strings.Fields(raw), copy)
+		kind, okType := selectUploadType(term, copy)
+		if !okType {
+			return ""
+		}
+		return uploadTypedPaths(profile, strings.Fields(raw), copy, kind)
 	case 5:
 		return statusText(copy, profile, ok)
 	case 6:
@@ -230,20 +234,47 @@ func readInput(term terminal, copy menuText, title string) (string, bool) {
 }
 
 func uploadPaths(profile config.Profile, paths []string, copy menuText) string {
-	client := &http.Client{Timeout: 2 * time.Minute}
+	return uploadTypedPaths(profile, paths, copy, "image")
+}
+
+func selectUploadType(term terminal, copy menuText) (string, bool) {
+	labels := []string{"Images", "Video", "Audio"}
+	if copy.current == "当前配置" {
+		labels = []string{"图片", "视频", "音频"}
+	}
+	kinds := []string{"image", "video", "audio"}
+	selected := 0
+	for {
+		draw(term, copy, labels, selected, config.Profile{}, false, false, "")
+		key, err := term.Key()
+		if err != nil {
+			return "", false
+		}
+		switch key {
+		case "up":
+			selected = (selected + 2) % 3
+		case "down":
+			selected = (selected + 1) % 3
+		case "enter":
+			return kinds[selected], true
+		case "esc", "q", "Q":
+			return "", false
+		}
+	}
+}
+
+func uploadTypedPaths(profile config.Profile, paths []string, copy menuText, kind string) string {
+	client := &http.Client{Timeout: 60 * time.Minute}
 	mode := image.Mode(config.EffectiveMode(profile.Mode, ""))
 	quality := config.EffectiveQuality(profile.Quality, 0)
 	var links []string
 	for _, name := range paths {
-		data, err := os.ReadFile(name)
-		if err != nil {
-			return err.Error()
-		}
-		processed, err := prepareUpload(name, data, false, false, mode, quality)
+		processed, err := openUpload(name, kind, mode, quality)
 		if err != nil {
 			return fmt.Sprintf("%s: %s", name, err.Error())
 		}
-		link, err := postFile(client, profile.Host+"/api/v1/upload", profile.Token, processed)
+		link, err := postSource(client, profile.Host+"/api/v1/upload", profile.Token, processed)
+		processed.Close()
 		if err != nil {
 			return fmt.Sprintf("%s: %s", name, err.Error())
 		}

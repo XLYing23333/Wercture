@@ -17,7 +17,7 @@ import urllib.request
 ROOT = pathlib.Path(__file__).resolve().parent
 UNIT = "wercture.service"
 UNIT_PATH = pathlib.Path("/etc/systemd/system") / UNIT
-DEFAULT_IMAGE = "wercture-server:0.1.0"
+DEFAULT_IMAGE = "wercture-server:0.2.0"
 DATA_UID = 10001
 ALLOWED_NAMES = {
     "wercture.db",

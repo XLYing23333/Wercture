@@ -19,7 +19,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export type User = { id: number; username: string; role: "admin" | "user"; status?: "pending" | "active" | "disabled"; invite?: string };
-export type Settings = { locale: "en" | "zh-CN"; theme: "system" | "light" | "dark" };
+export type Settings = { locale: "en" | "zh-CN"; theme: "system" | "light" | "dark"; max_upload_bytes: number };
 export type Warehouse = {
   id: number;
   name: string;
@@ -61,12 +61,17 @@ export function pageRender(picture: Picture) {
 }
 
 export function pageMarkdown(picture: Picture) {
-  const name = picture.name.replaceAll("]", "");
+  const name = picture.name.replaceAll("\r", "").replaceAll("\n", "").replaceAll("]", " ");
+  if (picture.mime.startsWith("audio/") || picture.mime.startsWith("video/")) return `[${name}](${pageLink(picture)})`;
   if (picture.mime === "text/markdown") return `[${name}](${pageRender(picture)})`;
   return `![${name}](${pageLink(picture)})`;
 }
 
 export function pageHTML(picture: Picture) {
+  const url = escapeHTML(pageLink(picture));
+  const name = escapeHTML(picture.name);
+  if (picture.mime.startsWith("audio/")) return `<audio controls src="${url}" title="${name}"></audio>`;
+  if (picture.mime.startsWith("video/")) return `<video controls src="${url}" title="${name}"></video>`;
   if (picture.mime === "text/markdown") {
     return `<a href="${pageRender(picture)}">${escapeHTML(picture.name)}</a>`;
   }
@@ -75,5 +80,5 @@ export function pageHTML(picture: Picture) {
 }
 
 function escapeHTML(value: string) {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+  return value.replaceAll("\r", "").replaceAll("\n", "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }

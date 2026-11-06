@@ -5,25 +5,22 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"image"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
-	"io"
 	"mime"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	_ "golang.org/x/image/webp"
 
 	"wercture/server/internal/auth"
-	"wercture/server/internal/preview"
 	"wercture/server/internal/store"
 	"wercture/server/internal/webui"
 )
@@ -507,11 +504,6 @@ func (s *Server) copyImages(w http.ResponseWriter, r *http.Request) {
 	}()
 	records := make([]store.NewImage, 0, len(sources))
 	for _, image := range sources {
-		data, err := os.ReadFile(s.store.FilePath(image))
-		if err != nil {
-			writeError(w, err)
-			return
-		}
 		publicID, err := newPublicID()
 		if err != nil {
 			writeError(w, err)
@@ -520,11 +512,20 @@ func (s *Server) copyImages(w http.ResponseWriter, r *http.Request) {
 		rel := filepath.Join("files", publicID)
 		abs := filepath.Join(s.store.DataDir(), rel)
 		staged = append(staged, abs)
-		if err := writeFile(abs, data); err != nil {
+		if err := copyStored(s.store.FilePath(image), abs); err != nil {
 			writeError(w, err)
 			return
 		}
-		s.documentPreview(abs, image.MIME, data)
+		sourcePreview := s.store.FilePath(image) + ".preview.png"
+		if _, err := os.Stat(sourcePreview); err == nil {
+			if err := copyStored(sourcePreview, abs+".preview.png"); err != nil {
+				writeError(w, err)
+				return
+			}
+		} else if err := s.filePreview(abs, image.MIME); err != nil {
+			writeError(w, err)
+			return
+		}
 		records = append(records, store.NewImage{
 			PublicID: publicID, Name: image.Name, MIME: image.MIME, Size: image.Size,
 			Width: image.Width, Height: image.Height, StoragePath: rel, WarehouseID: body.WarehouseID, UploaderID: user.ID,
@@ -702,7 +703,7 @@ func (s *Server) previewImage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	if image.MIME != "application/pdf" && image.MIME != "text/markdown" {
+	if image.MIME != "application/pdf" && image.MIME != "text/markdown" && !strings.HasPrefix(image.MIME, "video/") && !strings.HasPrefix(image.MIME, "audio/") {
 		http.NotFound(w, r)
 		return
 	}
@@ -729,7 +730,7 @@ func (s *Server) publicImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ext == ".preview.png" {
-		if image.MIME == "application/pdf" || image.MIME == "text/markdown" {
+		if image.MIME == "application/pdf" || image.MIME == "text/markdown" || strings.HasPrefix(image.MIME, "video/") || strings.HasPrefix(image.MIME, "audio/") {
 			s.servePreview(w, r, image, true)
 			return
 		}
@@ -767,52 +768,12 @@ func (s *Server) serveMarkdownPage(w http.ResponseWriter, r *http.Request) {
 // A link with no suffix stays valid.
 func publicRef(raw string) (string, string) {
 	lower := strings.ToLower(raw)
-	for _, ext := range []string{".preview.png", ".jpeg", ".jpg", ".png", ".gif", ".webp", ".html", ".pdf", ".markdown", ".md"} {
+	for _, ext := range []string{".preview.png", ".jpeg", ".jpg", ".png", ".gif", ".webp", ".html", ".pdf", ".markdown", ".md", ".mp4", ".webm", ".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac"} {
 		if strings.HasSuffix(lower, ext) && len(raw) > len(ext) {
 			return raw[:len(raw)-len(ext)], ext
 		}
 	}
 	return raw, ""
-}
-
-func (s *Server) acceptUpload(r *http.Request, warehouseID, uploaderID int64) (store.Image, error) {
-	data, name, err := readUpload(r.Body, r.Header.Get("Content-Type"))
-	if err != nil {
-		return store.Image{}, err
-	}
-	kind, ok := sniff(data, name)
-	if !ok {
-		return store.Image{}, errBadType
-	}
-	width, height := 0, 0
-	if strings.HasPrefix(kind, "image/") {
-		cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
-		if err != nil || cfg.Width < 1 || cfg.Height < 1 {
-			return store.Image{}, errBadType
-		}
-		width, height = cfg.Width, cfg.Height
-	} else if kind == "application/pdf" || kind == "text/markdown" {
-		width, height = 900, 1200
-	}
-	publicID, err := newPublicID()
-	if err != nil {
-		return store.Image{}, err
-	}
-	rel := filepath.Join("files", publicID)
-	abs := filepath.Join(s.store.DataDir(), rel)
-	if err := writeFile(abs, data); err != nil {
-		return store.Image{}, err
-	}
-	s.documentPreview(abs, kind, data)
-	image, err := s.store.InsertImage(store.NewImage{
-		PublicID: publicID, Name: cleanName(name), MIME: kind, Size: int64(len(data)),
-		Width: width, Height: height, StoragePath: rel, WarehouseID: warehouseID, UploaderID: uploaderID,
-	})
-	if err != nil {
-		removeStored(abs)
-		return store.Image{}, err
-	}
-	return image, nil
 }
 
 func (s *Server) admin(r *http.Request) (store.User, error) {
@@ -848,42 +809,6 @@ func bearer(r *http.Request) string {
 		return ""
 	}
 	return strings.TrimSpace(value[len(prefix):])
-}
-
-func readUpload(body io.Reader, contentType string) ([]byte, string, error) {
-	mediaType, params, err := mime.ParseMediaType(contentType)
-	if err != nil || !strings.HasPrefix(mediaType, "multipart/") {
-		return nil, "", errBadType
-	}
-	reader := multipart.NewReader(io.LimitReader(body, maxUpload+1<<20), params["boundary"])
-	for {
-		part, err := reader.NextPart()
-		if errors.Is(err, io.EOF) {
-			return nil, "", errBadType
-		}
-		if err != nil {
-			var max *http.MaxBytesError
-			if errors.As(err, &max) {
-				return nil, "", errTooLarge
-			}
-			return nil, "", errBadType
-		}
-		if part.FormName() != "file" {
-			continue
-		}
-		data, err := io.ReadAll(io.LimitReader(part, maxUpload+1))
-		_ = part.Close()
-		if err != nil {
-			return nil, "", err
-		}
-		if len(data) == 0 {
-			return nil, "", errBadType
-		}
-		if len(data) > maxUpload {
-			return nil, "", errTooLarge
-		}
-		return data, part.FileName(), nil
-	}
 }
 
 func sniff(data []byte, name string) (string, bool) {
@@ -935,21 +860,6 @@ func cleanName(name string) string {
 	return string(runes)
 }
 
-func writeFile(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp, 0o600); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return os.Rename(tmp, path)
-}
-
 func removeStored(path string) {
 	_ = os.Remove(path + ".tmp")
 	_ = os.Remove(path)
@@ -968,23 +878,19 @@ func documentFont() []byte {
 	return fontData
 }
 
-func (s *Server) documentPreview(path, mime string, data []byte) {
-	if mime != "application/pdf" && mime != "text/markdown" {
+func (s *Server) servePreview(w http.ResponseWriter, r *http.Request, image store.Image, public bool) {
+	if strings.HasPrefix(image.MIME, "audio/") {
+		webui.ServeMusic(w, r)
 		return
 	}
-	_ = preview.Write(path+".preview.png", mime, data, documentFont())
-}
-
-func (s *Server) servePreview(w http.ResponseWriter, r *http.Request, image store.Image, public bool) {
 	file := s.store.FilePath(image)
 	previewPath := file + ".preview.png"
 	if _, err := os.Stat(previewPath); err != nil {
-		data, err := os.ReadFile(file)
-		if err != nil {
+		if strings.HasPrefix(image.MIME, "video/") {
 			http.NotFound(w, r)
 			return
 		}
-		if err := preview.Write(previewPath, image.MIME, data, documentFont()); err != nil {
+		if err := s.filePreview(file, image.MIME); err != nil {
 			http.Error(w, "preview unavailable", http.StatusInternalServerError)
 			return
 		}
@@ -1007,7 +913,7 @@ func nameWithExt(name, ext string) string {
 	if strings.HasSuffix(lower, ext) || (ext == ".jpg" && strings.HasSuffix(lower, ".jpeg")) {
 		return name
 	}
-	for _, old := range []string{".jpeg", ".jpg", ".png", ".gif", ".webp", ".pdf", ".markdown", ".md"} {
+	for _, old := range []string{".jpeg", ".jpg", ".png", ".gif", ".webp", ".pdf", ".markdown", ".md", ".mp4", ".webm", ".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac"} {
 		if strings.HasSuffix(lower, old) {
 			return name[:len(name)-len(old)] + ext
 		}
@@ -1025,6 +931,9 @@ func inlineDisposition(name string) string {
 }
 
 func serveFile(w http.ResponseWriter, r *http.Request, image store.Image, path string, public bool) {
+	if strings.HasPrefix(image.MIME, "video/") || strings.HasPrefix(image.MIME, "audio/") {
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
+	}
 	name := image.Name
 	if public {
 		name = nameWithExt(name, store.PublicExt(image.MIME))

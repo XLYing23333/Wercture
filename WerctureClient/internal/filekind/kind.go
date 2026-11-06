@@ -1,4 +1,4 @@
-// Package filekind tells an upload apart as an image, PDF, or Markdown file.
+// Package filekind identifies supported image, document, video, and audio uploads.
 package filekind
 
 import (
@@ -27,6 +27,13 @@ func Classify(name string, data []byte) string {
 	case markdownName(name) && len(bytes.TrimSpace(data)) > 0 && utf8.Valid(data) && !bytes.Contains(data, []byte{0}):
 		return Markdown
 	default:
+		kind := MediaMIME(name, data)
+		if strings.HasPrefix(kind, "video/") {
+			return Video
+		}
+		if strings.HasPrefix(kind, "audio/") {
+			return Audio
+		}
 		return ""
 	}
 }

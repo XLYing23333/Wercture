@@ -26,7 +26,6 @@ const (
 	cookieName    = "wercture_session"
 	setupHeader   = "X-Wercture-Setup"
 	joinHeader    = "X-Wercture-Join"
-	maxUpload     = 32 << 20
 	loginWindow   = 10 * time.Minute
 	loginBan      = 30 * time.Minute
 	loginFailures = 5
@@ -34,15 +33,16 @@ const (
 
 // Server serves the management UI, the upload API, and public image links.
 type Server struct {
-	store     *store.Store
-	hasher    auth.Hasher
-	guard     *loginGuard
-	hashSlots chan struct{}
+	store      *store.Store
+	hasher     auth.Hasher
+	guard      *loginGuard
+	hashSlots  chan struct{}
+	mediaSlots chan struct{}
 }
 
 // New returns an HTTP server using the given password hasher.
 func New(st *store.Store, hasher auth.Hasher) *Server {
-	return &Server{store: st, hasher: hasher, guard: newLoginGuard(), hashSlots: make(chan struct{}, 2)}
+	return &Server{store: st, hasher: hasher, guard: newLoginGuard(), hashSlots: make(chan struct{}, 2), mediaSlots: make(chan struct{}, 2)}
 }
 
 // Handler is the full HTTP handler.
@@ -447,20 +447,21 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		writeCode(w, http.StatusForbidden, "forbidden")
 		return
 	}
-	var body store.Settings
+	var body struct {
+		Locale         string `json:"locale"`
+		Theme          string `json:"theme"`
+		MaxUploadBytes *int64 `json:"max_upload_bytes"`
+	}
 	if err := readJSON(r, &body); err != nil {
 		writeCode(w, http.StatusBadRequest, "invalid")
 		return
 	}
-	if err := s.store.SetLocale(body.Locale); err != nil {
+	saved, err := s.store.UpdateSettings(body.Locale, body.Theme, body.MaxUploadBytes)
+	if err != nil {
 		writeError(w, err)
 		return
 	}
-	if err := s.store.SetTheme(body.Theme); err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, body)
+	writeJSON(w, http.StatusOK, saved)
 }
 
 func (s *Server) current(r *http.Request) (store.User, error) {

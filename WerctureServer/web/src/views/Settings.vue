@@ -11,6 +11,7 @@ const router = useRouter();
 const { t, locale } = useI18n();
 const me = ref<User | null>(null);
 const settings = ref<Settings | null>(null);
+const uploadMiB = ref<number | undefined>(1024);
 const current = ref("");
 const next = ref("");
 const again = ref("");
@@ -20,6 +21,7 @@ async function load() {
   const [session, value] = await Promise.all([api<User>("/api/v1/auth/session"), api<Settings>("/api/v1/settings")]);
   me.value = session;
   settings.value = value;
+  uploadMiB.value = value.max_upload_bytes / 1048576;
   locale.value = value.locale;
   applyTheme(value.theme);
 }
@@ -40,6 +42,17 @@ async function saveAppearance() {
     fail(err);
     await load();
   }
+}
+
+async function saveUploadLimit() {
+  const value = uploadMiB.value;
+  if (!settings.value || value === undefined || !Number.isSafeInteger(value) || value < 1 || value > 8589934591) {
+    ElMessage.error(t("invalid"));
+    await load();
+    return;
+  }
+  settings.value.max_upload_bytes = value * 1048576;
+  await saveAppearance();
 }
 
 async function changePassword() {
@@ -93,6 +106,15 @@ onUnmounted(() => {
             <el-radio-button value="dark">{{ t("dark") }}</el-radio-button>
           </el-radio-group>
         </div>
+        <div class="option-row upload-limit">
+          <span>{{ t("maxUploadSize") }}</span>
+          <div>
+            <el-input-number v-model="uploadMiB" :min="1" :max="8589934591" :precision="0" :step="1" controls-position="right" :aria-label="t('maxUploadSize')" />
+            <span> MiB </span>
+            <el-button @click="saveUploadLimit">{{ t("save") }}</el-button>
+          </div>
+        </div>
+        <p class="hint">{{ t("uploadLimitHint") }}</p>
       </section>
       <section class="form-block">
         <h3>{{ t("password") }}</h3>

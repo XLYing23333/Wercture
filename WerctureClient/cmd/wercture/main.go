@@ -1,24 +1,19 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
-	"path"
 	"strings"
 	"time"
 
 	"wercture/client/internal/config"
-	"wercture/client/internal/filekind"
 	"wercture/client/internal/image"
 )
 
-var version = "0.1.0"
+var version = "0.2.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -51,6 +46,8 @@ wercture config list|rm|use|edit ...
 wercture upload [--profile name] [--link url|typora|obsidian|markdown|html] [--compress] [--webp] [--none] [--quality N] files...
 wercture upload --pdf files...
 wercture upload --md files...
+wercture upload --video files...
+wercture upload --audio files...
 `)
 }
 
@@ -185,8 +182,10 @@ func runUpload(args []string) error {
 	quality := fs.Int("quality", 0, "quality 1-100")
 	pdf := fs.Bool("pdf", false, "upload PDF files")
 	md := fs.Bool("md", false, "upload Markdown files")
+	video := fs.Bool("video", false, "upload MP4 or WebM video")
+	audio := fs.Bool("audio", false, "upload audio files")
 	linkStyle := fs.String("link", "url", "output url, typora, obsidian, markdown, or html")
-	ordered, err := flagsFirst(args, map[string]bool{"compress": true, "webp": true, "none": true, "pdf": true, "md": true})
+	ordered, err := flagsFirst(args, map[string]bool{"compress": true, "webp": true, "none": true, "pdf": true, "md": true, "video": true, "audio": true})
 	if err != nil {
 		return err
 	}
@@ -199,13 +198,28 @@ func runUpload(args []string) error {
 	if fs.NArg() == 0 {
 		return errors.New("upload needs at least one file")
 	}
-	db, err := config.Open("")
+	kind, err := uploadKind(*pdf, *md, *video, *audio)
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	if kind != "image" {
+		var explicit bool
+		fs.Visit(func(f *flag.Flag) {
+			if f.Name == "compress" || f.Name == "webp" || f.Name == "none" || f.Name == "quality" {
+				explicit = true
+			}
+		})
+		if explicit {
+			return errors.New("file type flags cannot be combined with image processing flags")
+		}
+	}
 	var saved config.Profile
 	if *host == "" || *token == "" {
+		db, err := config.Open("")
+		if err != nil {
+			return err
+		}
+		defer db.Close()
 		if *profileName != "" {
 			saved, err = db.Get(*profileName)
 		} else {
@@ -224,26 +238,21 @@ func runUpload(args []string) error {
 	if saved.Host == "" || saved.Token == "" {
 		return errors.New("host and token are required")
 	}
-	if (*pdf && *md) || ((*pdf || *md) && (*none || *compress || *webp)) {
-		return errors.New("--pdf and --md cannot be combined with image processing")
-	}
 	flagMode, _, err := flagsMode(*none, *compress, *webp)
 	if err != nil {
 		return err
 	}
 	mode := image.Mode(config.EffectiveMode(saved.Mode, flagMode))
 	qualityValue := config.EffectiveQuality(saved.Quality, *quality)
-	client := &http.Client{Timeout: 2 * time.Minute}
+	client := &http.Client{Timeout: 60 * time.Minute}
 	for _, name := range fs.Args() {
-		data, err := os.ReadFile(name)
-		if err != nil {
-			return err
-		}
-		processed, err := prepareUpload(name, data, *pdf, *md, mode, qualityValue)
+		processed, err := openUpload(name, kind, mode, qualityValue)
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
-		link, err := postFile(client, saved.Host+"/api/v1/upload", saved.Token, processed)
+		link, err := postSource(client, saved.Host+"/api/v1/upload", saved.Token, processed)
+		processed.Close()
+
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
@@ -254,75 +263,6 @@ func runUpload(args []string) error {
 		fmt.Println(line)
 	}
 	return nil
-}
-
-func prepareUpload(name string, data []byte, pdf, md bool, mode image.Mode, quality int) (image.Result, error) {
-	base := path.Base(name)
-	switch filekind.Classify(base, data) {
-	case filekind.PDF:
-		if !pdf {
-			return image.Result{}, errors.New("pdf files need upload --pdf")
-		}
-		return image.Result{Data: data, Name: base, MIME: "application/pdf"}, nil
-	case filekind.Markdown:
-		if !md {
-			return image.Result{}, errors.New("markdown files need upload --md")
-		}
-		return image.Result{Data: data, Name: base, MIME: "text/markdown"}, nil
-	case filekind.Image:
-		if pdf || md {
-			return image.Result{}, errors.New("image files cannot use --pdf or --md")
-		}
-		return image.Process(data, base, mode, quality)
-	default:
-		if pdf {
-			return image.Result{}, errors.New("not a pdf")
-		}
-		if md {
-			return image.Result{}, errors.New("not a markdown file")
-		}
-		return image.Result{}, errors.New("unsupported file")
-	}
-}
-
-func postFile(client *http.Client, endpoint, token string, file image.Result) (string, error) {
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	part, err := writer.CreateFormFile("file", file.Name)
-	if err != nil {
-		return "", err
-	}
-	if _, err := part.Write(file.Data); err != nil {
-		return "", err
-	}
-	if err := writer.Close(); err != nil {
-		return "", err
-	}
-	req, err := http.NewRequest(http.MethodPost, endpoint, &body)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+token)
-	res, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	raw, _ := io.ReadAll(res.Body)
-	if res.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("upload status %d: %s", res.StatusCode, strings.TrimSpace(string(raw)))
-	}
-	url := jsonString(raw, "url")
-	if file.MIME == "text/markdown" {
-		if render := jsonString(raw, "render_url"); render != "" {
-			url = render
-		}
-	}
-	if url == "" {
-		return "", errors.New("upload response has no url")
-	}
-	return url, nil
 }
 
 // flagsFirst lets a name or file sit before its flags.
@@ -361,12 +301,20 @@ func formatLink(style, rawURL, name, mime string) (string, error) {
 		return rawURL, nil
 	case "markdown":
 		label := markdownLabel(name)
-		if mime == "application/pdf" || mime == "text/markdown" {
+		if mime == "application/pdf" || mime == "text/markdown" || strings.HasPrefix(mime, "audio/") || strings.HasPrefix(mime, "video/") {
 			return "[" + label + "](" + rawURL + ")", nil
 		}
 		return "![" + label + "](" + rawURL + ")", nil
 	case "html":
 		label := htmlText(name)
+		escapedURL := htmlText(rawURL)
+		if strings.HasPrefix(mime, "audio/") {
+			return `<audio controls src="` + escapedURL + `" title="` + label + `"></audio>`, nil
+		}
+		if strings.HasPrefix(mime, "video/") {
+			return `<video controls src="` + escapedURL + `" title="` + label + `"></video>`, nil
+		}
+
 		if mime == "application/pdf" || mime == "text/markdown" {
 			return `<a href="` + rawURL + `">` + label + `</a>`, nil
 		}

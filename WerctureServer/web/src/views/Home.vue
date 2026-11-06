@@ -66,7 +66,7 @@ onMounted(() => void load());
     <div v-else-if="ready" class="cards">
       <router-link v-for="item in shown" :key="item.id" class="card" :to="'/warehouses/' + item.id">
         <span class="stack" aria-hidden="true">
-          <img v-for="(src, index) in (item.previews || []).slice(0, 3)" :key="src" :src="src" alt="" :style="{ zIndex: 3 - index }" />
+          <img v-for="(src, index) in (item.previews || []).slice(0, 3)" :key="src" :src="src" :class="{ 'audio-thumb': src.endsWith('/music-note-beamed.svg') }" alt="" :style="{ zIndex: 3 - index }" />
         </span>
         <span class="card-copy">
           <strong>{{ item.name }}</strong>

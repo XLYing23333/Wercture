@@ -42,8 +42,10 @@ func Write(path, mime string, data, fontBytes []byte) error {
 
 func page(mime string, data, fontBytes []byte) image.Image {
 	if mime == "application/pdf" {
-		if img, err := renderPDF(data); err == nil && img != nil {
-			return fit(img)
+		if len(data) > 0 {
+			if img, err := renderPDF(data); err == nil && img != nil {
+				return fit(img)
+			}
 		}
 		return textPage([]string{"PDF"}, fontBytes)
 	}
@@ -198,6 +200,7 @@ func markdownLines(src string) []string {
 
 func writeAtomic(path string, data []byte) error {
 	tmp := path + ".tmp"
+	defer os.Remove(tmp)
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}

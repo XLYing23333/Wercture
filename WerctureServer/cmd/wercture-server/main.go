@@ -20,7 +20,7 @@ import (
 	"wercture/server/internal/store"
 )
 
-var version = "0.1.0"
+var version = "0.2.0"
 
 func main() {
 	log.SetFlags(0)
@@ -89,8 +89,8 @@ func run(args []string) error {
 		Addr:              *listen,
 		Handler:           app.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       5 * time.Minute,
-		WriteTimeout:      5 * time.Minute,
+		ReadTimeout:       60 * time.Minute,
+		WriteTimeout:      60 * time.Minute,
 		IdleTimeout:       time.Minute,
 	}
 	errCh := make(chan error, 1)

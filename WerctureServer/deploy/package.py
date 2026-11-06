@@ -4,7 +4,6 @@
 import argparse
 import hashlib
 import json
-import os
 import pathlib
 import shutil
 import subprocess
@@ -35,38 +34,16 @@ def checksum(path):
 
 
 def build_image(image, version):
-    """Compile on the host, then pack a scratch image with the same entrypoint as the Dockerfile."""
-    subprocess.run(["npm", "run", "build"], cwd=SERVER / "web", check=True)
-    env = os.environ.copy()
-    env["CGO_ENABLED"] = "0"
-    with tempfile.TemporaryDirectory(prefix="wercture-binary-") as tmp:
-        binary = pathlib.Path(tmp) / "wercture-server"
-        subprocess.run(
-            [
-                "go", "build", "-trimpath", "-buildvcs=false",
-                "-ldflags", "-s -w -X main.version=" + version,
-                "-o", str(binary), "./cmd/wercture-server",
-            ],
-            cwd=SERVER,
-            env=env,
-            check=True,
-        )
-        stage = pathlib.Path(tmp) / "image"
-        stage.mkdir()
-        shutil.copy2(binary, stage / "wercture-server")
-        (stage / "Dockerfile").write_text(
-            "FROM scratch\n"
-            "COPY wercture-server /wercture-server\n"
-            "USER 10001:10001\n"
-            'ENTRYPOINT ["/wercture-server"]\n'
-            'CMD ["run", "--data", "/data", "--listen", ":9416"]\n'
-        )
-        subprocess.run(["docker", "build", "-t", image, str(stage)], check=True)
+    """Build the release image with the runtime dependencies from the server Dockerfile."""
+    subprocess.run(
+        ["docker", "build", "--build-arg", "WERCTURE_VERSION=" + version, "-t", image, str(SERVER)],
+        check=True,
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", default="0.1.0")
+    parser.add_argument("--version", default="0.2.0")
     parser.add_argument("--output", default="")
     parser.add_argument("--skip-build", action="store_true")
     args = parser.parse_args()

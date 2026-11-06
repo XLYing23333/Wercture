@@ -113,6 +113,17 @@ func absoluteLinks(r *http.Request, image store.Image) map[string]any {
 		"markdown": "![" + alt + "](" + link + ")",
 		"html":     `<img src="` + link + `" alt="` + alt + `">`,
 	}
+	if strings.HasPrefix(image.MIME, "audio/") || strings.HasPrefix(image.MIME, "video/") {
+		label := strings.NewReplacer("\r", "", "\n", "", "]", " ").Replace(image.Name)
+		escaped := strings.NewReplacer("\r", "", "\n", "", "&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;")
+		tag := "audio"
+		if strings.HasPrefix(image.MIME, "video/") {
+			tag = "video"
+		}
+		out["markdown"] = "[" + label + "](" + link + ")"
+		out["html"] = `<` + tag + ` controls src="` + escaped.Replace(link) + `" title="` + escaped.Replace(image.Name) + `"></` + tag + `>`
+	}
+
 	if image.MIME == "text/markdown" {
 		renderPath := "/i/" + image.PublicID + ".html"
 		out["render_path"] = renderPath

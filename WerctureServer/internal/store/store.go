@@ -69,10 +69,11 @@ type User struct {
 	phc       string
 }
 
-// Settings is the single server-wide appearance row.
+// Settings contains server-wide appearance and upload limits.
 type Settings struct {
-	Locale string `json:"locale"`
-	Theme  string `json:"theme"`
+	Locale         string `json:"locale"`
+	Theme          string `json:"theme"`
+	MaxUploadBytes int64  `json:"max_upload_bytes"`
 }
 
 // Warehouse is one image collection owned by a user.
@@ -574,10 +575,24 @@ func (s *Store) RevokeSession(token string) error {
 	return err
 }
 
-// GetSettings reads the appearance row.
+// GetSettings reads the global settings.
 func (s *Store) GetSettings() (Settings, error) {
 	var out Settings
-	err := s.db.QueryRow(`SELECT locale, theme FROM settings WHERE id=1`).Scan(&out.Locale, &out.Theme)
+	err := s.db.QueryRow(`SELECT locale, theme, max_upload_bytes FROM settings WHERE id=1`).Scan(&out.Locale, &out.Theme, &out.MaxUploadBytes)
+	return out, err
+}
+
+// UpdateSettings atomically changes the global settings. A nil limit preserves it.
+func (s *Store) UpdateSettings(locale, theme string, limit *int64) (Settings, error) {
+	if (locale != "en" && locale != "zh-CN") || (theme != "system" && theme != "light" && theme != "dark") || (limit != nil && (*limit < 1 || *limit > 9007199254740991)) {
+		return Settings{}, ErrInvalid
+	}
+	var value any
+	if limit != nil {
+		value = *limit
+	}
+	var out Settings
+	err := s.db.QueryRow(`UPDATE settings SET locale=?, theme=?, max_upload_bytes=COALESCE(?, max_upload_bytes) WHERE id=1 RETURNING locale, theme, max_upload_bytes`, locale, theme, value).Scan(&out.Locale, &out.Theme, &out.MaxUploadBytes)
 	return out, err
 }
 
@@ -874,7 +889,10 @@ func scanImage(row interface{ Scan(...any) error }, image *Image) error {
 
 // CardPath is the picture shown on a warehouse card.
 func CardPath(publicID, mime string) string {
-	if mime == "application/pdf" || mime == "text/markdown" {
+	if strings.HasPrefix(mime, "audio/") {
+		return "/music-note-beamed.svg"
+	}
+	if strings.HasPrefix(mime, "video/") || mime == "application/pdf" || mime == "text/markdown" {
 		return "/i/" + publicID + ".preview.png"
 	}
 	return "/i/" + publicID + PublicExt(mime)
@@ -891,6 +909,22 @@ func PublicExt(mime string) string {
 		return ".gif"
 	case "image/webp":
 		return ".webp"
+	case "video/mp4":
+		return ".mp4"
+	case "video/webm":
+		return ".webm"
+	case "audio/mpeg":
+		return ".mp3"
+	case "audio/mp4":
+		return ".m4a"
+	case "audio/aac":
+		return ".aac"
+	case "audio/wav":
+		return ".wav"
+	case "audio/ogg":
+		return ".ogg"
+	case "audio/flac":
+		return ".flac"
 	case "application/pdf":
 		return ".pdf"
 	case "text/markdown":

@@ -4,7 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
 import ImageBoard from "../ImageBoard.vue";
-import { ApiError, api, type Picture, type Token, type Warehouse } from "../api";
+import { ApiError, api, type Settings, type Picture, type Token, type Warehouse } from "../api";
 import { confirmAction } from "../confirm";
 import { reasonText } from "../i18n";
 
@@ -89,7 +89,11 @@ async function upload(event: Event) {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files ?? []);
   input.value = "";
+  let limit: number;
+  try { limit = (await api<Settings>("/api/v1/settings")).max_upload_bytes; }
+  catch (err) { fail(err); return; }
   for (const file of files) {
+    if (file.size > limit) { ElMessage.error(t("uploadTooLarge", { name: file.name, limit: limit / 1048576 })); continue; }
     const body = new FormData();
     body.append("file", file);
     try {
@@ -216,7 +220,7 @@ onUnmounted(() => observer?.disconnect());
     </header>
     <div class="toolbar action-bar">
       <el-button type="primary" @click="fileInput?.click()">{{ t("upload") }}</el-button>
-      <input ref="fileInput" hidden type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,.pdf,.md,.markdown,text/markdown" multiple @change="upload" />
+      <input ref="fileInput" hidden type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,.pdf,.md,.markdown,text/markdown,video/mp4,video/webm,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,audio/flac,.mp4,.webm,.mp3,.m4a,.aac,.wav,.ogg,.flac" multiple @change="upload" />
       <el-button @click="removeWarehouse">{{ t("deleteWarehouse") }}</el-button>
       <el-button @click="openKeys">{{ t("manageKeys") }}</el-button>
     </div>

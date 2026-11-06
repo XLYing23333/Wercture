@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MediaView from "./MediaView.vue";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
@@ -106,9 +107,21 @@ function kindLabel(mime: string) {
       return "pdf";
     case "text/markdown":
       return "md";
+    case "video/mp4": return "mp4";
+    case "video/webm": return "webm";
+    case "audio/mpeg": return "mp3";
+    case "audio/mp4": return "m4a";
+    case "audio/aac": return "aac";
+    case "audio/wav": return "wav";
+    case "audio/ogg": return "ogg";
+    case "audio/flac": return "flac";
     default:
       return "";
   }
+}
+
+function isMedia(picture: Picture) {
+  return picture.mime.startsWith("video/") || picture.mime.startsWith("audio/");
 }
 
 function isDoc(picture: Picture) {
@@ -179,7 +192,8 @@ function src(picture: Picture) {
 }
 
 function thumb(picture: Picture) {
-  if (!isDoc(picture)) return src(picture);
+  if (picture.mime.startsWith("audio/")) return "/music-note-beamed.svg";
+  if (!isDoc(picture) && !isMedia(picture)) return src(picture);
   return props.mode === "trash" ? `/api/v1/images/${picture.id}/preview` : `/i/${picture.public_id}.preview.png`;
 }
 
@@ -313,7 +327,7 @@ function confirmPlace() {
 }
 
 function onWheel(event: WheelEvent) {
-  if (!preview.value || isDoc(preview.value)) return;
+  if (!preview.value || isDoc(preview.value) || isMedia(preview.value)) return;
   event.preventDefault();
   const next = scale.value + (event.deltaY < 0 ? 0.15 : -0.15);
   scale.value = Math.min(6, Math.max(0.2, next));
@@ -353,8 +367,8 @@ onUnmounted(() => {
   <div v-else ref="gallery" class="gallery" @pointerdown="startDrag" @click="closeMenu">
     <div v-if="mode !== 'warehouse' || view !== 'auto'" class="grid" :class="mode === 'warehouse' ? `view-${view}` : ''">
       <article v-for="picture in shown" :key="picture.id" class="tile" :class="{ picked: selected.includes(picture.id) }" :data-id="picture.id">
-        <label class="tick"><input type="checkbox" :disabled="selected.length >= selectionLimit && !selected.includes(picture.id)" :checked="selected.includes(picture.id)" @change="toggle(picture.id, ($event.target as HTMLInputElement).checked)" /></label>
-        <img :class="{ 'doc-thumb': isDoc(picture) }" :src="thumb(picture)" :alt="picture.name" draggable="false" loading="lazy" decoding="async" @click="openPreview(picture)" @contextmenu.prevent="openMenu($event, picture)" />
+        <div class="tick"><el-checkbox :aria-label="picture.name" :disabled="selected.length >= selectionLimit && !selected.includes(picture.id)" :model-value="selected.includes(picture.id)" @change="toggle(picture.id, Boolean($event))" /></div>
+        <img :class="{ 'doc-thumb': isDoc(picture), 'audio-thumb': picture.mime.startsWith('audio/') }" :src="thumb(picture)" :alt="picture.name" draggable="false" loading="lazy" decoding="async" @click="openPreview(picture)" @contextmenu.prevent="openMenu($event, picture)" />
         <p :title="picture.name">
           <span class="tile-name">{{ picture.name }}</span>
           <span class="tile-foot">
@@ -367,8 +381,8 @@ onUnmounted(() => {
     <div v-else ref="board" class="justified">
       <div v-for="(row, index) in rows" :key="index" class="just-row">
         <article v-for="cell in row" :key="cell.picture.id" class="tile" :class="{ picked: selected.includes(cell.picture.id) }" :data-id="cell.picture.id" :style="{ width: cell.width + 'px' }">
-          <label class="tick"><input type="checkbox" :disabled="selected.length >= selectionLimit && !selected.includes(cell.picture.id)" :checked="selected.includes(cell.picture.id)" @change="toggle(cell.picture.id, ($event.target as HTMLInputElement).checked)" /></label>
-          <img :class="{ 'doc-thumb': isDoc(cell.picture) }" :src="thumb(cell.picture)" :alt="cell.picture.name" draggable="false" :style="{ height: cell.height + 'px' }" loading="lazy" decoding="async" @click="openPreview(cell.picture)" @contextmenu.prevent="openMenu($event, cell.picture)" />
+          <div class="tick"><el-checkbox :aria-label="cell.picture.name" :disabled="selected.length >= selectionLimit && !selected.includes(cell.picture.id)" :model-value="selected.includes(cell.picture.id)" @change="toggle(cell.picture.id, Boolean($event))" /></div>
+          <img :class="{ 'doc-thumb': isDoc(cell.picture), 'audio-thumb': cell.picture.mime.startsWith('audio/') }" :src="thumb(cell.picture)" :alt="cell.picture.name" draggable="false" :style="{ height: cell.height + 'px' }" loading="lazy" decoding="async" @click="openPreview(cell.picture)" @contextmenu.prevent="openMenu($event, cell.picture)" />
           <p :title="cell.picture.name">
             <span class="tile-name">{{ cell.picture.name }}</span>
             <span class="tile-foot">
@@ -418,9 +432,10 @@ onUnmounted(() => {
     </span>
   </div>
 
-  <div v-if="preview" class="lightbox" :class="{ doc: isDoc(preview) }" @click.self="preview = null" @wheel="onWheel">
+  <div v-if="preview" class="lightbox" :class="{ doc: isDoc(preview), media: isMedia(preview) }" @click.self="preview = null" @wheel="onWheel">
     <el-button class="close" @click="preview = null">{{ t("close") }}</el-button>
-    <PdfView v-if="preview.mime === 'application/pdf'" :src="src(preview)" />
+    <MediaView v-if="isMedia(preview)" :key="preview.id" :src="src(preview)" :mime="preview.mime" :name="preview.name" :poster="thumb(preview)" />
+    <PdfView v-else-if="preview.mime === 'application/pdf'" :src="src(preview)" />
     <iframe v-else-if="preview.mime === 'text/markdown' && mode === 'warehouse'" class="md-frame" :src="preview.path" title=""></iframe>
     <MarkdownView v-else-if="preview.mime === 'text/markdown'" :src="src(preview)" />
     <img v-else :src="src(preview)" :alt="preview.name" :style="{ transform: `scale(${scale})` }" />

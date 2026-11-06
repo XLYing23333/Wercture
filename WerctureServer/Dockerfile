@@ -11,10 +11,11 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /src/internal/webui/dist ./internal/webui/dist
-ARG WERCTURE_VERSION=0.1.0
+ARG WERCTURE_VERSION=0.2.0
 RUN CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-s -w -X main.version=${WERCTURE_VERSION}" -o /out/wercture-server ./cmd/wercture-server
 
-FROM scratch
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/wercture-server /wercture-server
 USER 10001:10001
 ENTRYPOINT ["/wercture-server"]
